@@ -81,7 +81,12 @@ Prerequisites: Python 3.11 or newer, and Git.
    pip install -r requirements.txt
    ```
 
-   Note: `requirements.txt` is a full environment freeze that includes CUDA builds of PyTorch, so the download is large (multiple GB).
+   On Linux, pip installs the CUDA build of PyTorch by default, which is several GB. If you do not have an NVIDIA GPU, install the smaller CPU-only build first, then install the rest:
+
+   ```bash
+   pip install torch==2.12.0 --index-url https://download.pytorch.org/whl/cpu
+   pip install -r requirements.txt
+   ```
 
 ## Usage
 
@@ -109,7 +114,7 @@ The pipeline is built in the notebooks and consumed by the app.
 2. **Category labels** (`text-classification.ipynb`): the most frequent original categories are mapped to four simple categories. Books that remain unlabelled (1,454) are classified as Fiction or Nonfiction with zero-shot classification using `facebook/bart-large-mnli`.
 3. **Emotion scores** (`sentiment-analysis.ipynb`): each description is split into sentences, every sentence is scored by `j-hartmann/emotion-english-distilroberta-base`, and the maximum score per emotion across sentences is stored as seven columns.
 4. **Vector index** (`vector-search.ipynb`): the tagged descriptions are embedded with `all-MiniLM-L6-v2` and persisted to ChromaDB.
-5. **Recommendation** (`app/gradio-dashboard.py`): the query is embedded and the 50 nearest descriptions are retrieved. Their ISBNs are used to look up the books, which are filtered by the selected category and, if an emotion is chosen, sorted by that emotion's score. The top 16 are displayed.
+5. **Recommendation** (`app/gradio-dashboard.py`): the query is embedded and the 50 nearest descriptions are retrieved. Their ISBNs are used to look up the books, which are kept in order of similarity, filtered by the selected category and, if an emotion is chosen, sorted by that emotion's score. The top 16 are displayed.
 
 To rebuild the processed data or the index from scratch, run the notebooks in the order listed above.
 
@@ -121,8 +126,8 @@ The zero-shot category classifier was checked on 600 books whose category was al
 
 - About one in five zero-shot category labels is expected to be wrong, based on the accuracy above, so the category filter is approximate.
 - Filtering happens after retrieving 50 candidates, so a narrow category can return fewer than 16 books.
-- The emotion option re-orders results rather than removing books that do not match the emotion.
-- When the emotion option is set to "All", results appear in dataset order rather than in order of similarity to the query.
+- The emotion option re-orders results rather than removing books that do not match the emotion. It sorts purely by emotion score, so a less similar book can rank above a closer match.
+- Different editions of the same book have separate ISBNs, so the same title can appear more than once in the results.
 - The catalogue is small (about 5,200 titles), so niche queries may return loosely related books.
 
 ## Dataset
@@ -131,10 +136,10 @@ The raw data is the [7k Books](https://www.kaggle.com/datasets/dylanjcastillo/7k
 
 ## Future Improvements
 
-- Preserve similarity order in the results and add a relevance score to the display
+- Show a relevance score next to each result
+- Merge duplicate editions of the same title
 - Evaluate recommendation quality with a labelled query set or user feedback
 - Add user-based or hybrid (content plus collaborative) recommendations
-- Slim `requirements.txt` down to the packages the project actually imports
 - Deploy the app to a cloud platform such as Hugging Face Spaces
 
 ## License

@@ -157,9 +157,19 @@ def filter_and_rank(
     top_n=16
 ):
 
+    # isin() returns rows in dataset order, not search order, so keep each
+    # ISBN's similarity rank (0 = closest match) and sort by it explicitly.
+    similarity_rank = {}
+
+    for rank, isbn in enumerate(isbn_list):
+        similarity_rank.setdefault(isbn, rank)
+
     results = _BOOKS_DF[
-        _BOOKS_DF["isbn13"].isin(isbn_list)
+        _BOOKS_DF["isbn13"].isin(similarity_rank)
     ].copy()
+
+    results["similarity_rank"] = results["isbn13"].map(similarity_rank)
+    results = results.sort_values("similarity_rank")
 
     if category != "All":
         results = results[
@@ -169,9 +179,11 @@ def filter_and_rank(
     emotion_col = emotion.lower()
 
     if emotion_col in EMOTION_COLS:
+        # Stable sort so books with equal emotion scores stay in similarity order.
         results = results.sort_values(
             emotion_col,
-            ascending=False
+            ascending=False,
+            kind="stable"
         )
 
     return results.head(top_n)
