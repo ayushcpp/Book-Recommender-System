@@ -1,159 +1,146 @@
-# 📚 Book Recommender System
+# Book Recommender System
 
-A book recommendation system built using NLP, semantic search, and a simple Gradio interface.
+A semantic book recommender that finds books by meaning rather than keywords, with optional filtering by category and ranking by emotional tone, served through a Gradio web interface.
 
-Instead of relying only on keywords, the application uses vector embeddings and ChromaDB to find books that are semantically similar to a user's query.
-
-For example, a query like:
+A query such as:
 
 > "a dark fantasy with betrayal and political conflict"
 
-can return relevant books even if those exact words do not appear in the title.
-
----
+is embedded into a vector and compared against embeddings of about 5,200 book descriptions stored in ChromaDB, so relevant books are returned even when the exact words do not appear in their titles or descriptions.
 
 ## Features
 
-- Semantic book search using embeddings
-- Vector database powered by ChromaDB
-- Emotion-aware filtering
-- Category-based filtering
-- Interactive Gradio dashboard
-- Preprocessed and cleaned book dataset
-- Fast retrieval of relevant books
-
----
+- Semantic search over book descriptions using sentence embeddings (`all-MiniLM-L6-v2`)
+- Persistent vector store built with ChromaDB through LangChain
+- Category filter (Fiction, Nonfiction, Children's Fiction, Children's Nonfiction), with missing categories filled in by zero-shot classification
+- Emotion-based ranking (joy, sadness, fear, anger, disgust, surprise, neutral) using a fine-tuned emotion classifier
+- Gradio dashboard with a cover-image gallery and a detail panel for each selected book
 
 ## Tech Stack
 
-- Python
-- Pandas
-- NumPy
-- LangChain
-- Hugging Face Embeddings
-- ChromaDB
-- Gradio
-
----
+| Component | Tool |
+|-----------|------|
+| Language | Python 3.11+ |
+| Data processing | pandas, NumPy |
+| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` via `langchain-huggingface` |
+| Vector store | ChromaDB via `langchain-chroma` |
+| Category classification | `facebook/bart-large-mnli` (zero-shot) via Hugging Face Transformers |
+| Emotion classification | `j-hartmann/emotion-english-distilroberta-base` via Hugging Face Transformers |
+| User interface | Gradio |
 
 ## Project Structure
 
 ```text
-Book Recommender/
-│
+Book-Recommender-System/
 ├── app/
-│   └── gradio-dashboard.py
-│
+│   └── gradio-dashboard.py          # Gradio application
 ├── data/
 │   ├── raw/
+│   │   └── books.csv                # Original dataset (6,810 books)
 │   └── processed/
-│
+│       ├── books_cleaned.csv        # After cleaning (5,197 books)
+│       ├── books_with_categories.csv
+│       ├── books_with_emotions.csv  # Final table used by the app
+│       └── tagged_description.txt   # "<isbn13> <description>" lines used for embedding
 ├── notebooks/
-│   ├── data-exploration.ipynb
-│   ├── vector-search.ipynb
-│   ├── text-classification.ipynb
-│   └── sentiment-analysis.ipynb
-│
-├── Chroma_DB/
-│
+│   ├── data-exploration.ipynb       # Cleaning and feature preparation
+│   ├── text-classification.ipynb    # Category mapping and zero-shot classification
+│   ├── sentiment-analysis.ipynb     # Emotion scoring
+│   └── vector-search.ipynb          # Embedding and ChromaDB index creation
+├── Chroma_DB/                       # Prebuilt vector index loaded by the app
 ├── requirements.txt
-│
 └── README.md
 ```
 
----
-
 ## Installation
 
-Clone the repository:
+Prerequisites: Python 3.11 or newer, and Git.
 
-```bash
-git clone <your-repository-url>
-cd Book-Recommender-System
-```
+1. Clone the repository:
 
-Create a virtual environment:
+   ```bash
+   git clone https://github.com/ayushcpp/Book-Recommender-System.git
+   cd Book-Recommender-System
+   ```
 
-```bash
-python -m venv venv
-```
+2. Create and activate a virtual environment:
 
-Activate the environment:
+   ```bash
+   python -m venv venv
 
-### Linux / macOS
+   # Linux / macOS
+   source venv/bin/activate
 
-```bash
-source venv/bin/activate
-```
+   # Windows
+   venv\Scripts\activate
+   ```
 
-### Windows
+3. Install the dependencies:
 
-```bash
-venv\Scripts\activate
-```
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Install dependencies:
+   Note: `requirements.txt` is a full environment freeze that includes CUDA builds of PyTorch, so the download is large (multiple GB).
 
-```bash
-pip install -r requirements.txt
-```
+## Usage
 
----
-
-## Running the Application
-
-Move into the app directory:
+Run the dashboard from inside the `app/` directory, because the data and index paths in the script are relative to it:
 
 ```bash
 cd app
-```
-
-Run the dashboard:
-
-```bash
 python gradio-dashboard.py
 ```
 
-A local Gradio URL will be generated in the terminal.
+The app loads the processed dataset and the prebuilt index in `Chroma_DB/`, then opens the Gradio interface in your browser. On the first run, the embedding model is downloaded from Hugging Face, so an internet connection is required.
 
----
+In the interface:
+
+1. Describe the kind of book you want in the text box.
+2. Optionally choose a category and an emotion.
+3. Click **Find Books** to see up to 16 recommendations.
+4. Click a cover to view the full description.
 
 ## How It Works
 
-1. Book metadata is cleaned and processed.
-2. Book descriptions are converted into vector embeddings.
-3. Embeddings are stored in ChromaDB.
-4. User queries are converted into embeddings.
-5. Similarity search retrieves the most relevant books.
-6. Results can be refined using category and emotion filters.
+The pipeline is built in the notebooks and consumed by the app.
 
----
+1. **Cleaning** (`data-exploration.ipynb`): books missing a description, page count, rating or publication year are removed, as are books whose description has fewer than 25 words. This reduces the dataset from 6,810 to 5,197 books. Each description is prefixed with its ISBN-13 so search results can be mapped back to the book table.
+2. **Category labels** (`text-classification.ipynb`): the most frequent original categories are mapped to four simple categories. Books that remain unlabelled (1,454) are classified as Fiction or Nonfiction with zero-shot classification using `facebook/bart-large-mnli`.
+3. **Emotion scores** (`sentiment-analysis.ipynb`): each description is split into sentences, every sentence is scored by `j-hartmann/emotion-english-distilroberta-base`, and the maximum score per emotion across sentences is stored as seven columns.
+4. **Vector index** (`vector-search.ipynb`): the tagged descriptions are embedded with `all-MiniLM-L6-v2` and persisted to ChromaDB.
+5. **Recommendation** (`app/gradio-dashboard.py`): the query is embedded and the 50 nearest descriptions are retrieved. Their ISBNs are used to look up the books, which are filtered by the selected category and, if an emotion is chosen, sorted by that emotion's score. The top 16 are displayed.
+
+To rebuild the processed data or the index from scratch, run the notebooks in the order listed above.
+
+## Results
+
+The zero-shot category classifier was checked on 600 books whose category was already known (300 Fiction, 300 Nonfiction) and labelled 77.8% of them correctly. The recommendations themselves have not yet been evaluated with a quantitative metric.
+
+## Limitations
+
+- About one in five zero-shot category labels is expected to be wrong, based on the accuracy above, so the category filter is approximate.
+- Filtering happens after retrieving 50 candidates, so a narrow category can return fewer than 16 books.
+- The emotion option re-orders results rather than removing books that do not match the emotion.
+- When the emotion option is set to "All", results appear in dataset order rather than in order of similarity to the query.
+- The catalogue is small (about 5,200 titles), so niche queries may return loosely related books.
 
 ## Dataset
 
-The project uses a book dataset containing:
-
-- Title
-- Author
-- Description
-- Categories
-- Cover Images
-- ISBN Information
-
-The data is cleaned and enriched before being used for search and recommendation.
-
----
+The raw data is the [7k Books](https://www.kaggle.com/datasets/dylanjcastillo/7k-books-with-metadata) dataset by Dylan Castillo on Kaggle, released under CC0 (public domain). It combines ISBNs from a Goodreads dataset with metadata from the Google Books API, and includes title, subtitle, authors, categories, cover thumbnail, description, publication year, average rating, page count and ratings count.
 
 ## Future Improvements
 
-- User-based recommendations
-- Hybrid recommendation system
-- Better ranking strategies
-- Deployment on a cloud platform
-- Personalized recommendation history
+- Preserve similarity order in the results and add a relevance score to the display
+- Evaluate recommendation quality with a labelled query set or user feedback
+- Add user-based or hybrid (content plus collaborative) recommendations
+- Slim `requirements.txt` down to the packages the project actually imports
+- Deploy the app to a cloud platform such as Hugging Face Spaces
 
----
+## License
+
+No license file is included yet, so default copyright applies to the code. The dataset is CC0.
 
 ## Author
 
-Ayush Gairola
+Ayush Gairola ([ayushcpp](https://github.com/ayushcpp))
